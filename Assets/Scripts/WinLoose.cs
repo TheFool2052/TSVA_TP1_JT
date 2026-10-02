@@ -6,37 +6,28 @@ public class WinLoose : MonoBehaviour
     private bool gameEnded;
     public string nextLevelName;
 
-    public GameObject winPanel;
-
     public void WinLevel()
-    {
-        if (!gameEnded)
-        {
-            winPanel.SetActive(true);
-            
-            gameEnded = true;
-        }
-    }
-
-    public void LoadNextLevel()
-    {
-        if (nextLevelName != "")
-        {
-            SceneManager.LoadScene(nextLevelName);
-        }
-    }
-
-    public void RestartLevel()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-    public void LooseLevel()
     {
         if(!gameEnded)
         {
-            Debug.Log("You Loose");
-            RestartLevel();
+            // llevo 5 horas intentando hacer funcionar una ui con botones y lo botones no registran nada asi que vuelvo para atras
+            Debug.Log("You Win");
+            if (nextLevelName != "")
+            {
+                SceneManager.LoadScene(nextLevelName);
+            }
             gameEnded = true;
-        } 
+        }
+    }
+
+    public void LooseLevel()
+    {
+        if (!gameEnded)
+        {
+            // Ese mensaje es 100% intencional...
+            Debug.Log("You are Goose");
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            gameEnded = true;
+        }
     }
 }
