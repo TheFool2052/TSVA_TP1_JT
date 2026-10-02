@@ -3,99 +3,114 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [Header("References")]
-    public CharacterController controller;
-    [SerializeField] public Transform camera;
+    public Transform playerCamera;
+    private CharacterController controller;
 
-    [Header("Movement Settings")]
-    [SerializeField] public float walkSpeed = 5f;
-    [SerializeField] public float sprintSpeed = 10f;
-    [SerializeField] public float sprintTransitSpeed = 5f;
-    [SerializeField] public float turningSpeed = 2f;
-    [SerializeField] public float gravity = 9.81f;
-    [SerializeField] public float jumpHeight = 2f;
+    [Header("Movement Speeds")]
+    public float walkSpeed = 5f;
+    public float sprintSpeed = 9f;
+    public float rotationSpeed = 10f;
 
-    public float verticalVelocity;
-    public float speed;
+    [Header("Jumping & Gravity")]
+    public float jumpHeight = 2f;
+    public float gravity = -19.62f;
+    private Vector3 playerVelocity;
+    private bool isGrounded;
 
-    [Header("Input")]
-    public float moveInput;
-    public float turnInput;
+    [Header("Jumping Fixes")]
+    [Tooltip("Grace period in seconds allowing you to jump right after leaving an edge or slope.")]
+    public float coyoteTime = 0.15f;
+    private float coyoteTimeCounter;
 
-    public void Start()
+    [Header("Orbit Camera Settings")]
+    public float mouseSensitivity = 3f;
+    public float cameraDistance = 5f;
+    public float minVerticalAngle = -20f;
+    public float maxVerticalAngle = 65f;
+
+    private float cameraX = 0f;
+    private float cameraY = 0f;
+
+    void Awake()
     {
-      controller = GetComponent<CharacterController>();
+        controller = GetComponent<CharacterController>();
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
-    public void Update()
+    void Update()
     {
-        InputManagement();
-        Movement();
-    }
+        isGrounded = controller.isGrounded;
 
-    public void Movement()
-    {
-        GroundMovement();
-        Turn();
-    }
-
-    public void GroundMovement()
-    {
-        Vector3 move = new Vector3(turnInput, 0, moveInput);
-        move = camera.transform.TransformDirection(move);
-
-        if (Input.GetKey(KeyCode.LeftShift))
+        // --- COYOTE TIME LOGIC ---
+        if (isGrounded)
         {
-            speed = Mathf.Lerp(speed, sprintSpeed, sprintTransitSpeed * Time.deltaTime);
-        }
-        else
-        {
-            speed = Mathf.Lerp(speed, walkSpeed, sprintTransitSpeed * Time.deltaTime);
-        }
-        
-        move *= speed;
+            coyoteTimeCounter = coyoteTime; // Reset timer when firmly on ground
 
-        move.y = VerticalForceCalculation();
-
-        controller.Move(move * Time.deltaTime);
-    }
-
-    public void Turn()
-    {
-        if (Mathf.Abs(turnInput) < 0 || Mathf.Abs(moveInput) > 0)
-        {
-            Vector3 currentLookDirection = controller.velocity.normalized;
-            currentLookDirection.y = 0;
-
-            currentLookDirection.Normalize();
-
-            Quaternion targetRotation = Quaternion.LookRotation(currentLookDirection);
-
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * turningSpeed);
-        }
-        
-    }
-
-    public float VerticalForceCalculation()
-    {
-        if (controller.isGrounded)
-        {
-            verticalVelocity = -1f;
-
-            if (Input.GetButtonDown("Jump"))
+            if (playerVelocity.y < 0)
             {
-                verticalVelocity = Mathf.Sqrt(jumpHeight * gravity * 2);
+                playerVelocity.y = -2f; // Keep pinned to slopes
             }
         }
         else
         {
-            verticalVelocity -= gravity * Time.deltaTime;
+            coyoteTimeCounter -= Time.deltaTime; // Count down when airborne
         }
-        return verticalVelocity;
+
+        HandleCameraOrbit();
+        HandleMovement();
+
+        // --- FIXED JUMP CHECK ---
+        // Instead of checking isGrounded, check if our grace timer is active
+        if (Input.GetButtonDown("Jump") && coyoteTimeCounter > 0f)
+        {
+            playerVelocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            coyoteTimeCounter = 0f; // Instantly expend the timer so they can't double jump
+        }
+
+        playerVelocity.y += gravity * Time.deltaTime;
+        controller.Move(playerVelocity * Time.deltaTime);
     }
 
-    public void InputManagement()
+    void HandleCameraOrbit()
     {
-        moveInput = Input.GetAxis("Vertical");
-        turnInput = Input.GetAxis("Horizontal");
+        if (playerCamera == null) return;
+
+        cameraX += Input.GetAxis("Mouse X") * mouseSensitivity;
+        cameraY -= Input.GetAxis("Mouse Y") * mouseSensitivity;
+        cameraY = Mathf.Clamp(cameraY, minVerticalAngle, maxVerticalAngle);
+
+        Quaternion cameraRotation = Quaternion.Euler(cameraY, cameraX, 0f);
+        Vector3 targetPivot = transform.position + Vector3.up * 1f;
+        Vector3 cameraPosition = targetPivot - (cameraRotation * Vector3.forward * cameraDistance);
+
+        playerCamera.rotation = cameraRotation;
+        playerCamera.position = cameraPosition;
+    }
+
+    void HandleMovement()
+    {
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
+        Vector3 inputDirection = new Vector3(horizontal, 0f, vertical).normalized;
+
+        if (inputDirection.magnitude >= 0.1f)
+        {
+            float targetSpeed = Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : walkSpeed;
+
+            Vector3 cameraForward = playerCamera.forward;
+            Vector3 cameraRight = playerCamera.right;
+
+            cameraForward.y = 0f;
+            cameraRight.y = 0f;
+            cameraForward.Normalize();
+            cameraRight.Normalize();
+
+            Vector3 moveDirection = cameraForward * inputDirection.z + cameraRight * inputDirection.x;
+            controller.Move(moveDirection * targetSpeed * Time.deltaTime);
+
+            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+        }
     }
 }
